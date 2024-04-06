@@ -1,5 +1,7 @@
 package jp.jaxa.iss.kibo.rpc.defaultapk;
 
+import android.util.Log;
+
 import org.opencv.aruco.Aruco;
 import org.opencv.calib3d.Calib3d;
 import org.opencv.core.Mat;
@@ -26,18 +28,25 @@ import jp.jaxa.iss.kibo.rpc.api.KiboRpcService;
 
 public class YourService extends KiboRpcService {
 
-//    Mat navCameraMatrix = new Mat(3, 3 , CvType.CV_64F);
-//    Mat navDistortionCoefficients = new Mat(1 , 5 , CvType.CV_64F);
-//    Mat dockCameraMatrix = new Mat(3, 3 , CvType.CV_64F);
-//    Mat dockDistortionCoefficients = new Mat(1 , 5 , CvType.CV_64F);
+    private double[][]  navCamIntrinsicsMatrix;
+    private double[][] dockCamIntrinsicsMatrix;
 
     @Override
     protected void runPlan1() {
         api.startMission();
+        initCalibMatrix();
+
+        api.saveMatImage(api.getMatDockCam(),"nD");
+        api.saveMatImage(getDockCamCalibrateMat(),"D");
+
+        api.saveMatImage(api.getMatNavCam(),"nN");
+        api.saveMatImage(getNavCamCalibrateMat(),"N");//testImg
 
 
-        Mat img = Imgcodecs.imread("TEST.jpg");
-        detectArucoFromMat(img);
+        Mat img = Imgcodecs.imread("TEST.png");//wait for fix, imgload failed
+
+        detectArucoFromMat(img);//wait for test
+
         api.reportRoundingCompletion();
     }
 
@@ -50,8 +59,6 @@ public class YourService extends KiboRpcService {
     protected void runPlan3() {
         // write your plan 3 here
     }
-
-
 
     private boolean moveToWithRetry(Point point, Quaternion quaternion, int loopMAX_time) {
         Result result;
@@ -68,35 +75,50 @@ public class YourService extends KiboRpcService {
         return result.hasSucceeded();
     }
 
-//    private Mat getNavCamCalibrateMat() {
-//        Mat originalImage = api.getMatNavCam();
-//
-//        Mat calibrateImaged = new Mat();
-//
-//        Calib3d.undistort(
-//                originalImage,
-//                calibrateImaged,
-//                navCameraMatrix,
-//                navDistortionCoefficients
-//        );
-//        return calibrateImaged;
-//    }
-//
-//    private Mat getDockCamCalibrateMat(){
-//        Mat originalImage = api.getMatDockCam();
-//
-//        Mat calibrateImaged = new Mat();
-//
-//        Calib3d.undistort(
-//                originalImage,
-//                calibrateImaged,
-//                dockCameraMatrix,
-//                dockDistortionCoefficients
-//        );
-//        return calibrateImaged;
-//    }
+    private Mat getNavCamCalibrateMat() {
+
+        Mat navCameraMatrix = new Mat(3, 3 , CvType.CV_64F);
+        Mat navDistortionCoefficients = new Mat(1 , 5 , CvType.CV_64F);
+        setCamCalib(navCamIntrinsicsMatrix[0], navCamIntrinsicsMatrix[1], navCameraMatrix, navDistortionCoefficients);
+
+        Mat originalImage = api.getMatNavCam();
+
+        Mat calibrateImaged = new Mat();
+
+        Calib3d.undistort(
+                originalImage,
+                calibrateImaged,
+                navCameraMatrix,
+                navDistortionCoefficients
+        );
+        return calibrateImaged;
+    }
+
+    private Mat getDockCamCalibrateMat(){
+
+        Mat dockCameraMatrix = new Mat(3, 3 , CvType.CV_64F);
+        Mat dockDistortionCoefficients = new Mat(1 , 5 , CvType.CV_64F);
+        setCamCalib(dockCamIntrinsicsMatrix[0], dockCamIntrinsicsMatrix[1], dockCameraMatrix, dockDistortionCoefficients);
+
+        Mat originalImage = api.getMatDockCam();
+
+        Mat calibrateImaged = new Mat();
+
+        Calib3d.undistort(
+                originalImage,
+                calibrateImaged,
+                dockCameraMatrix,
+                dockDistortionCoefficients
+        );
+        return calibrateImaged;
+    }
 
     private void detectArucoFromMat(Mat mat){
+
+        if(mat.empty()){
+            Log.i("imgLoad", "imgLoad_FAILED");
+            api.reportRoundingCompletion();
+        }
 
         List<Mat> arucoCorners = new ArrayList<>();
         Mat arucoIDs = new Mat();
@@ -137,43 +159,22 @@ public class YourService extends KiboRpcService {
         }
     }
 
-//    private void initGetCalibMat(){
-//        double[] navCamDoubleMatrix = api.getNavCamIntrinsics()[0];
-//        double[] navDistortionCoefficientsDoubleMatrix = api.getNavCamIntrinsics()[1];
-//
-//        navCameraMatrix.put(0,0, navCamDoubleMatrix[0]);
-//        navCameraMatrix.put(0,1, navCamDoubleMatrix[1]);
-//        navCameraMatrix.put(0,2, navCamDoubleMatrix[2]);
-//        navCameraMatrix.put(1,0, navCamDoubleMatrix[3]);
-//        navCameraMatrix.put(1,1, navCamDoubleMatrix[4]);
-//        navCameraMatrix.put(1,2, navCamDoubleMatrix[5]);
-//        navCameraMatrix.put(2,0, navCamDoubleMatrix[6]);
-//        navCameraMatrix.put(2,1, navCamDoubleMatrix[7]);
-//        navCameraMatrix.put(2,2, navCamDoubleMatrix[8]);
-//
-//        navDistortionCoefficients.put(0,0, navDistortionCoefficientsDoubleMatrix[0]);
-//        navDistortionCoefficients.put(0,1, navDistortionCoefficientsDoubleMatrix[1]);
-//        navDistortionCoefficients.put(0,2, navDistortionCoefficientsDoubleMatrix[2]);
-//        navDistortionCoefficients.put(0,3, navDistortionCoefficientsDoubleMatrix[3]);
-//        navDistortionCoefficients.put(0,4, navDistortionCoefficientsDoubleMatrix[4]);
-//
-//        double[] dockCamDoubleMatrix = api.getDockCamIntrinsics()[0];
-//        double[] dockDistortionCoefficientsDoubleMatrix = api.getDockCamIntrinsics()[1];
-//
-//        dockCameraMatrix.put(0,0, dockCamDoubleMatrix[0]);
-//        dockCameraMatrix.put(0,1, dockCamDoubleMatrix[1]);
-//        dockCameraMatrix.put(0,2, dockCamDoubleMatrix[2]);
-//        dockCameraMatrix.put(1,0, dockCamDoubleMatrix[3]);
-//        dockCameraMatrix.put(1,1, dockCamDoubleMatrix[4]);
-//        dockCameraMatrix.put(1,2, dockCamDoubleMatrix[5]);
-//        dockCameraMatrix.put(2,0, dockCamDoubleMatrix[6]);
-//        dockCameraMatrix.put(2,1, dockCamDoubleMatrix[7]);
-//        dockCameraMatrix.put(2,2, dockCamDoubleMatrix[8]);
-//
-//        dockDistortionCoefficients.put(0,0, dockDistortionCoefficientsDoubleMatrix[0]);
-//        dockDistortionCoefficients.put(0,1, dockDistortionCoefficientsDoubleMatrix[1]);
-//        dockDistortionCoefficients.put(0,2, dockDistortionCoefficientsDoubleMatrix[2]);
-//        dockDistortionCoefficients.put(0,3, dockDistortionCoefficientsDoubleMatrix[3]);
-//        dockDistortionCoefficients.put(0,4, dockDistortionCoefficientsDoubleMatrix[4]);
-//    }
+    private void setCamCalib(double[] cameraDoubleMatrix, double[] distortionCoefficientsDoubleMatrix, Mat cameraMatrix, Mat distortionCoefficients) {
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                cameraMatrix.put(i, j, cameraDoubleMatrix[i * 3 + j]);
+            }
+        }
+
+        for (int i = 0; i < 1; i++) {
+            for (int j = 0; j < 5; j++) {
+                distortionCoefficients.put(i, j, distortionCoefficientsDoubleMatrix[j]);
+            }
+        }
+    }
+
+    private void initCalibMatrix(){
+        navCamIntrinsicsMatrix = api.getNavCamIntrinsics();
+        dockCamIntrinsicsMatrix = api.getDockCamIntrinsics();
+    }
 }
