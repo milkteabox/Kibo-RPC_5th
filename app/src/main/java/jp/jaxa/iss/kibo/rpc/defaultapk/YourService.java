@@ -11,7 +11,7 @@ import org.opencv.core.MatOfPoint2f;
 import org.opencv.core.MatOfPoint3f;
 import org.opencv.core.Point3;
 import org.opencv.core.Scalar;
-import org.opencv.imgcodecs.Imgcodecs;
+import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
 
 import java.util.ArrayList;
@@ -21,6 +21,9 @@ import gov.nasa.arc.astrobee.Result;
 import gov.nasa.arc.astrobee.types.Point;
 import gov.nasa.arc.astrobee.types.Quaternion;
 import jp.jaxa.iss.kibo.rpc.api.KiboRpcService;
+import jp.jaxa.iss.kibo.rpc.defaultapk.constants.Area;
+
+import static jp.jaxa.iss.kibo.rpc.defaultapk.constants.Constants.*;
 
 /**
  * Class meant to handle commands from the Ground Data System and execute them in Astrobee
@@ -36,16 +39,10 @@ public class YourService extends KiboRpcService {
         api.startMission();
         initCalibMatrix();
 
-        api.saveMatImage(api.getMatDockCam(),"nD");
-        api.saveMatImage(getDockCamCalibrateMat(),"D");
-
-        api.saveMatImage(api.getMatNavCam(),"nN");
-        api.saveMatImage(getNavCamCalibrateMat(),"N");//testImg
+        moveToWithRetry(new Point(10.95, -9.0,5.195), astronautPointwithQuaternion.quaternion, 5);
 
 
-        Mat img = Imgcodecs.imread("TEST.png");//wait for fix, imgload failed
-
-        detectArucoFromMat(img);//wait for test
+        detectArucoFromMat(getDockCamCalibrateMat(), dockCamIntrinsicsMatrix[0]);
 
         api.reportRoundingCompletion();
     }
@@ -113,26 +110,38 @@ public class YourService extends KiboRpcService {
         return calibrateImaged;
     }
 
-    private void detectArucoFromMat(Mat mat){
+    private void detectArucoFromMat(Mat img, double[] CamDoubleMatrix){
 
-        if(mat.empty()){
-            Log.i("imgLoad", "imgLoad_FAILED");
-            api.reportRoundingCompletion();
-        }
+        Mat cameraMatrix = new Mat(3, 3 , CvType.CV_64F);
+
+        cameraMatrix.put(0,0, CamDoubleMatrix[0]);
+        cameraMatrix.put(0,1, 0);
+        cameraMatrix.put(0,2, CamDoubleMatrix[2]);
+        cameraMatrix.put(1,0, 0);
+        cameraMatrix.put(1,1, CamDoubleMatrix[4]);
+        cameraMatrix.put(1,2, CamDoubleMatrix[5]);
+        cameraMatrix.put(2,0, 0);
+        cameraMatrix.put(2,1, 0);
+        cameraMatrix.put(2,2, 1);
+
+
+        Mat distCoeffs = new Mat(1 , 5 , CvType.CV_64F);
+        distCoeffs.setTo(new Scalar(0.0));
+        MatOfDouble doubleDistCoeffs = new MatOfDouble(0.0, 0.0, 0.0, 0.0, 0.0);
 
         List<Mat> arucoCorners = new ArrayList<>();
         Mat arucoIDs = new Mat();
 
-        Mat arucoDrawMat = mat;
+        Aruco.detectMarkers(img, Aruco.getPredefinedDictionary(Aruco.DICT_5X5_250), arucoCorners, arucoIDs);
 
-        Aruco.detectMarkers(mat,  Aruco.getPredefinedDictionary(Aruco.DICT_5X5_250), arucoCorners, arucoIDs);
-
+        Mat arucoDrawMat = img;
         Aruco.drawDetectedMarkers(arucoDrawMat, arucoCorners, arucoIDs, new Scalar(0, 255, 0));
+        api.saveMatImage(arucoDrawMat,"123.mat");
 
-        if (!arucoCorners.isEmpty()){
+        if(!arucoIDs.empty()) {
             Mat rvecs = new Mat();
             Mat tvecs = new Mat();
-            Aruco.estimatePoseSingleMarkers(arucoCorners, 0.05f, new MatOfDouble(), new MatOfDouble(), rvecs, tvecs);
+            Aruco.estimatePoseSingleMarkers(arucoCorners, 5.0f, cameraMatrix, distCoeffs, rvecs, tvecs);
 
             MatOfPoint3f itemBoardWorldPoint = new MatOfPoint3f(
                     new Point3(3.75, 3.75, 0),
@@ -142,21 +151,22 @@ public class YourService extends KiboRpcService {
 
             MatOfPoint2f itemBoardImagePoints = new MatOfPoint2f();
 
-            Calib3d.projectPoints(itemBoardWorldPoint, rvecs, tvecs, new MatOfDouble(), new MatOfDouble(), itemBoardImagePoints);
+            Calib3d.projectPoints(itemBoardWorldPoint, rvecs, tvecs, cameraMatrix, doubleDistCoeffs, itemBoardImagePoints);
 
             org.opencv.core.Point topRight = new org.opencv.core.Point(itemBoardImagePoints.get(0, 0));
             org.opencv.core.Point bottomLeft = new org.opencv.core.Point(itemBoardImagePoints.get(1, 0));
             org.opencv.core.Point bottomRight = new org.opencv.core.Point(itemBoardImagePoints.get(2, 0));
             org.opencv.core.Point topLeft = new org.opencv.core.Point(itemBoardImagePoints.get(3, 0));
 
-            Mat test = mat;
+            Mat test = img;
             Imgproc.line(test, topRight, bottomRight, new Scalar(0, 255, 0), 2);
             Imgproc.line(test, bottomRight, bottomLeft, new Scalar(0, 255, 0), 2);
             Imgproc.line(test, bottomLeft, topLeft, new Scalar(0, 255, 0), 2);
             Imgproc.line(test, topLeft, topRight, new Scalar(0, 255, 0), 2);
 
-            api.saveMatImage(test,"test");
+            api.saveMatImage(test,"test.mat");
         }
+
     }
 
     private void setCamCalib(double[] cameraDoubleMatrix, double[] distortionCoefficientsDoubleMatrix, Mat cameraMatrix, Mat distortionCoefficients) {
@@ -176,5 +186,11 @@ public class YourService extends KiboRpcService {
     private void initCalibMatrix(){
         navCamIntrinsicsMatrix = api.getNavCamIntrinsics();
         dockCamIntrinsicsMatrix = api.getDockCamIntrinsics();
+    }
+
+    public static Mat resizeImage(Mat inputImage, double scaleFactor) {
+        Mat resizedImage = new Mat();
+        Imgproc.resize(inputImage, resizedImage, new Size(), scaleFactor, scaleFactor, Imgproc.INTER_LINEAR);
+        return resizedImage;
     }
 }

@@ -43,5 +43,5 @@ public class Constants {
 
 
     public static final PointWithQuaternion astronautPointwithQuaternion =
-            new PointWithQuaternion(new Point(11.143, -6.6707, 4.9654), new Quaternion(1, 0, 0, 0));
+            new PointWithQuaternion(new Point(11.143, -6.6707, 4.9654), new Quaternion(0f, 0f, 0.707f, 0.707f));
 }
