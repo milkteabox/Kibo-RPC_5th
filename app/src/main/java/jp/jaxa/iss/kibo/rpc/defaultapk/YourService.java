@@ -144,19 +144,19 @@ public class YourService extends KiboRpcService {
             Aruco.estimatePoseSingleMarkers(arucoCorners, 5.0f, cameraMatrix, distCoeffs, rvecs, tvecs);
 
             MatOfPoint3f itemBoardWorldPoint = new MatOfPoint3f(
-                    new Point3(3.75, 3.75, 0),
-                    new Point3(3.75, -11.25, 0),
+                    new Point3(-24.25, 3.75, 0),
                     new Point3(-24.25, -11.25, 0),
-                    new Point3(-24.25, 3.75, 0));
+                    new Point3(3.75, -11.25, 0),
+                    new Point3(3.75, 3.75, 0));
 
             MatOfPoint2f itemBoardImagePoints = new MatOfPoint2f();
 
             Calib3d.projectPoints(itemBoardWorldPoint, rvecs, tvecs, cameraMatrix, doubleDistCoeffs, itemBoardImagePoints);
 
-            org.opencv.core.Point topRight = new org.opencv.core.Point(itemBoardImagePoints.get(0, 0));
+            org.opencv.core.Point topLeft = new org.opencv.core.Point(itemBoardImagePoints.get(0, 0));
             org.opencv.core.Point bottomLeft = new org.opencv.core.Point(itemBoardImagePoints.get(1, 0));
             org.opencv.core.Point bottomRight = new org.opencv.core.Point(itemBoardImagePoints.get(2, 0));
-            org.opencv.core.Point topLeft = new org.opencv.core.Point(itemBoardImagePoints.get(3, 0));
+            org.opencv.core.Point topRight = new org.opencv.core.Point(itemBoardImagePoints.get(3, 0));
 
             Mat test = img;
             Imgproc.line(test, topRight, bottomRight, new Scalar(0, 255, 0), 2);
@@ -165,6 +165,21 @@ public class YourService extends KiboRpcService {
             Imgproc.line(test, topLeft, topRight, new Scalar(0, 255, 0), 2);
 
             api.saveMatImage(test,"test.mat");
+
+            int cmpp = 30;
+            Mat frontalView = new Mat(15 * cmpp, 27 * cmpp, CvType.CV_8UC3);
+
+            MatOfPoint2f dstPoints = new MatOfPoint2f(
+                    new org.opencv.core.Point(0, 0),
+                    new org.opencv.core.Point(0, frontalView.rows() - 1),
+                    new org.opencv.core.Point(frontalView.cols() - 1, frontalView.rows() - 1),
+                    new org.opencv.core.Point(frontalView.cols() - 1, 0));
+
+
+            Mat transformationMatrix = Imgproc.getPerspectiveTransform(itemBoardImagePoints, dstPoints);
+            Imgproc.warpPerspective(img, frontalView, transformationMatrix, frontalView.size());
+
+            api.saveMatImage(frontalView, "frontalView.mat");
         }
 
     }
