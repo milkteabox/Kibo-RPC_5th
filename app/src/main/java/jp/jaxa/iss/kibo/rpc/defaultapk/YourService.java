@@ -50,6 +50,7 @@ public class YourService extends KiboRpcService {
     @Override
     protected void runPlan2() {
         // write your plan 2 here
+        
     }
 
     @Override
