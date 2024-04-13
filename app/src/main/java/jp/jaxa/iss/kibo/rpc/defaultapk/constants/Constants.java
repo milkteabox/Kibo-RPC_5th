@@ -35,7 +35,6 @@ public class Constants {
             new Area(new Point(10.25, -7.40, 4.97), new Point(10.87, -7.35, 5.62));
 
 
-
     public static final Area kiz1 =
             new Area(new Point(10.3, -10.2, 4.32), new Point(11.55, -6.0, 5.57));
     public static final Area kiz2 =
@@ -44,4 +43,5 @@ public class Constants {
 
     public static final PointWithQuaternion astronautPointwithQuaternion =
             new PointWithQuaternion(new Point(11.143, -6.6707, 4.9654), new Quaternion(0f, 0f, 0.707f, 0.707f));
+
 }

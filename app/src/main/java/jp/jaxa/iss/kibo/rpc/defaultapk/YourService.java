@@ -1,9 +1,11 @@
 package jp.jaxa.iss.kibo.rpc.defaultapk;
 
+
 import android.util.Log;
 
 import org.opencv.aruco.Aruco;
 import org.opencv.calib3d.Calib3d;
+import org.opencv.core.Core;
 import org.opencv.core.Mat;
 import org.opencv.core.CvType;
 import org.opencv.core.MatOfDouble;
@@ -16,12 +18,14 @@ import org.opencv.imgproc.Imgproc;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Queue;
+import java.util.Vector;
 
 import gov.nasa.arc.astrobee.Result;
 import gov.nasa.arc.astrobee.types.Point;
 import gov.nasa.arc.astrobee.types.Quaternion;
+import gov.nasa.arc.astrobee.types.Vec3d;
 import jp.jaxa.iss.kibo.rpc.api.KiboRpcService;
-import jp.jaxa.iss.kibo.rpc.defaultapk.constants.Area;
 
 import static jp.jaxa.iss.kibo.rpc.defaultapk.constants.Constants.*;
 
@@ -39,8 +43,10 @@ public class YourService extends KiboRpcService {
         api.startMission();
         initCalibMatrix();
 
-        moveToWithRetry(new Point(10.95, -9.0,5.195), astronautPointwithQuaternion.quaternion, 5);
+        Point robot = api.getRobotKinematics().getPosition();
+        moveToWithRetry(new Point(10.95, -9.0,5.195), astronautPointwithQuaternion.quaternion,  5);
 
+        sleep(5000);
 
         detectArucoFromMat(getDockCamCalibrateMat(), dockCamIntrinsicsMatrix[0]);
 
@@ -60,15 +66,19 @@ public class YourService extends KiboRpcService {
     private boolean moveToWithRetry(Point point, Quaternion quaternion, int loopMAX_time) {
         Result result;
         final int LOOP_MAX = loopMAX_time;
-
+        final float MAX_THRESHOLD = 0.02f;
         result = api.moveTo(point, quaternion, false);
-
+        Quaternion currentQuaternion = api.getRobotKinematics().getOrientation();
         int loopCounter = 0;
-        while (!result.hasSucceeded() && loopCounter < LOOP_MAX) {
+        while ((Math.abs(currentQuaternion.getX() - quaternion.getX()) >= MAX_THRESHOLD
+                || Math.abs(currentQuaternion.getY() - quaternion.getY()) >= MAX_THRESHOLD
+                || Math.abs(currentQuaternion.getZ() - quaternion.getZ()) >= MAX_THRESHOLD
+                || Math.abs(currentQuaternion.getW() - quaternion.getW()) >= MAX_THRESHOLD
+                || !result.hasSucceeded())
+                && loopCounter < LOOP_MAX) {
             result = api.moveTo(point, quaternion, false);
             ++loopCounter;
         }
-
         return result.hasSucceeded();
     }
 
@@ -134,20 +144,20 @@ public class YourService extends KiboRpcService {
 
         Aruco.detectMarkers(img, Aruco.getPredefinedDictionary(Aruco.DICT_5X5_250), arucoCorners, arucoIDs);
 
-        Mat arucoDrawMat = img;
+        Mat arucoDrawMat = img.clone();
         Aruco.drawDetectedMarkers(arucoDrawMat, arucoCorners, arucoIDs, new Scalar(0, 255, 0));
         api.saveMatImage(arucoDrawMat,"123.mat");
 
         if(!arucoIDs.empty()) {
             Mat rvecs = new Mat();
             Mat tvecs = new Mat();
-            Aruco.estimatePoseSingleMarkers(arucoCorners, 5.0f, cameraMatrix, distCoeffs, rvecs, tvecs);
+            Aruco.estimatePoseSingleMarkers(arucoCorners, 0.05f, cameraMatrix, distCoeffs, rvecs, tvecs);
 
             MatOfPoint3f itemBoardWorldPoint = new MatOfPoint3f(
-                    new Point3(-24.25, 3.75, 0),
-                    new Point3(-24.25, -11.25, 0),
-                    new Point3(3.75, -11.25, 0),
-                    new Point3(3.75, 3.75, 0));
+                    new Point3(-0.2425, 0.0375, 0),
+                    new Point3(-0.2425, -0.1125, 0),
+                    new Point3(0.0375, -0.1125, 0),
+                    new Point3(0.0375, 0.0375, 0));
 
             MatOfPoint2f itemBoardImagePoints = new MatOfPoint2f();
 
@@ -158,7 +168,7 @@ public class YourService extends KiboRpcService {
             org.opencv.core.Point bottomRight = new org.opencv.core.Point(itemBoardImagePoints.get(2, 0));
             org.opencv.core.Point topRight = new org.opencv.core.Point(itemBoardImagePoints.get(3, 0));
 
-            Mat test = img;
+            Mat test = img.clone();
             Imgproc.line(test, topRight, bottomRight, new Scalar(0, 255, 0), 2);
             Imgproc.line(test, bottomRight, bottomLeft, new Scalar(0, 255, 0), 2);
             Imgproc.line(test, bottomLeft, topLeft, new Scalar(0, 255, 0), 2);
@@ -180,8 +190,43 @@ public class YourService extends KiboRpcService {
             Imgproc.warpPerspective(img, frontalView, transformationMatrix, frontalView.size());
 
             api.saveMatImage(frontalView, "frontalView.mat");
-        }
 
+
+            Log.i("Aruco", "arucoPositionWorld: "+ tvecs.dump());
+
+            double[] tvec = tvecs.get(0, 0);
+            double[] arucoWorldPos = rotatePoint(tvec[0], tvec[1], tvec[2],astronautPointwithQuaternion.quaternion);
+            Log.i("Aruco", "X"+ arucoWorldPos[0] + "  Y:"+ arucoWorldPos[1] + "  Z:"+ arucoWorldPos[2]);
+        }
+    }
+
+    public static double[] rotatePoint(double x, double y, double z, Quaternion rotation) {
+        double[] result = new double[3];
+
+        // Convert the point to quaternion form
+        Quaternion p = new Quaternion((float) x, (float) y, (float) z, 0);
+
+        Quaternion q = rotation;
+        Quaternion q1 = multiplyQuaternions(q, p);
+        Quaternion rotatedPoint = multiplyQuaternions(q1,conjugate(q));
+
+        result[0] = rotatedPoint.getX();
+        result[1] = rotatedPoint.getY();
+        result[2] = rotatedPoint.getZ();
+
+        return result;
+    }
+
+    private static Quaternion multiplyQuaternions(Quaternion q1, Quaternion q2) {
+        float nw = q1.getW() * q2.getW() - q1.getX() * q2.getX() - q1.getY() * q2.getY() - q1.getZ() * q2.getZ();
+        float nx = q1.getW() * q2.getX() + q1.getX() * q2.getW() + q1.getY() * q2.getZ() - q1.getZ() * q2.getY();
+        float ny = q1.getW() * q2.getY() - q1.getX() * q2.getZ() + q1.getY() * q2.getW() + q1.getZ() * q2.getX();
+        float nz = q1.getW() * q2.getZ() + q1.getX() * q2.getY() - q1.getY() * q2.getX() + q1.getZ() * q2.getW();
+        return new Quaternion( nx, ny, nz, nw);
+    }
+
+    private static Quaternion conjugate(Quaternion q) {
+        return new Quaternion(-q.getX(), -q.getY(), -q.getZ(), q.getW());
     }
 
     private void setCamCalib(double[] cameraDoubleMatrix, double[] distortionCoefficientsDoubleMatrix, Mat cameraMatrix, Mat distortionCoefficients) {
@@ -203,9 +248,43 @@ public class YourService extends KiboRpcService {
         dockCamIntrinsicsMatrix = api.getDockCamIntrinsics();
     }
 
+    private void saveMat(Mat mat, String name){
+        api.saveMatImage(mat, name);
+    }
+
     public static Mat resizeImage(Mat inputImage, double scaleFactor) {
         Mat resizedImage = new Mat();
         Imgproc.resize(inputImage, resizedImage, new Size(), scaleFactor, scaleFactor, Imgproc.INTER_LINEAR);
         return resizedImage;
+    }
+
+    public static Quaternion calculateQuaternion(Point from, Point to) {
+        double distance = pointDistance(from, to);
+
+        double dx = from.getX() - to.getX();
+        double dy = from.getY() - to.getY();
+        double dz = from.getZ() - to.getZ();
+
+        double x = dx / distance;
+        double y = dy / distance;
+        double z = dz / distance;
+
+        return new Quaternion((float) x, (float) y, (float) z, (float) distance);
+    }
+
+    public static double pointDistance(Point point1, Point point2) {
+
+        double dx = point1.getX() - point2.getX();
+        double dy = point1.getY() - point2.getY();
+        double dz = point1.getZ() - point2.getZ();
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    public void sleep(long millis){
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 }

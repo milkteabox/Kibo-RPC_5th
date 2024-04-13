@@ -6,7 +6,6 @@ import android.graphics.BitmapFactory;
 
 import org.opencv.android.Utils;
 import org.opencv.core.Mat;
-import org.opencv.imgproc.Imgproc;
 
 public class ImageLoader {
 
