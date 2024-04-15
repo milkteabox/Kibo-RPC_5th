@@ -5,7 +5,6 @@ import android.util.Log;
 
 import org.opencv.aruco.Aruco;
 import org.opencv.calib3d.Calib3d;
-import org.opencv.core.Core;
 import org.opencv.core.Mat;
 import org.opencv.core.CvType;
 import org.opencv.core.MatOfDouble;
@@ -18,13 +17,10 @@ import org.opencv.imgproc.Imgproc;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Queue;
-import java.util.Vector;
 
 import gov.nasa.arc.astrobee.Result;
 import gov.nasa.arc.astrobee.types.Point;
 import gov.nasa.arc.astrobee.types.Quaternion;
-import gov.nasa.arc.astrobee.types.Vec3d;
 import jp.jaxa.iss.kibo.rpc.api.KiboRpcService;
 
 import static jp.jaxa.iss.kibo.rpc.defaultapk.constants.Constants.*;
@@ -66,16 +62,11 @@ public class YourService extends KiboRpcService {
     private boolean moveToWithRetry(Point point, Quaternion quaternion, int loopMAX_time) {
         Result result;
         final int LOOP_MAX = loopMAX_time;
-        final float MAX_THRESHOLD = 0.02f;
+        final double MAX_THRESHOLD_Angle = 8.75;
         result = api.moveTo(point, quaternion, false);
         Quaternion currentQuaternion = api.getRobotKinematics().getOrientation();
         int loopCounter = 0;
-        while ((Math.abs(currentQuaternion.getX() - quaternion.getX()) >= MAX_THRESHOLD
-                || Math.abs(currentQuaternion.getY() - quaternion.getY()) >= MAX_THRESHOLD
-                || Math.abs(currentQuaternion.getZ() - quaternion.getZ()) >= MAX_THRESHOLD
-                || Math.abs(currentQuaternion.getW() - quaternion.getW()) >= MAX_THRESHOLD
-                || !result.hasSucceeded())
-                && loopCounter < LOOP_MAX) {
+        while (calculateAngle(currentQuaternion, quaternion) <= MAX_THRESHOLD_Angle && loopCounter < LOOP_MAX) {
             result = api.moveTo(point, quaternion, false);
             ++loopCounter;
         }
@@ -195,7 +186,7 @@ public class YourService extends KiboRpcService {
             Log.i("Aruco", "arucoPositionWorld: "+ tvecs.dump());
 
             double[] tvec = tvecs.get(0, 0);
-            double[] arucoWorldPos = rotatePoint(tvec[0], tvec[1], tvec[2],astronautPointwithQuaternion.quaternion);
+            double[] arucoWorldPos = rotatePoint(tvec[0], tvec[1], tvec[2], astronautPointwithQuaternion.quaternion);
             Log.i("Aruco", "X"+ arucoWorldPos[0] + "  Y:"+ arucoWorldPos[1] + "  Z:"+ arucoWorldPos[2]);
         }
     }
@@ -278,6 +269,14 @@ public class YourService extends KiboRpcService {
         double dy = point1.getY() - point2.getY();
         double dz = point1.getZ() - point2.getZ();
         return Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    public static double calculateAngle(Quaternion q1, Quaternion q2) {
+        double dotProduct = q1.getW() * q2.getW() + q1.getX() * q2.getX() + q1.getY() * q2.getY() + q1.getZ() * q2.getZ();
+        double q1Magnitude = Math.sqrt(q1.getW() * q1.getW() + q1.getX() * q1.getX() + q1.getY() * q1.getY() + q1.getZ() * q1.getZ());
+        double q2Magnitude = Math.sqrt(q2.getW() * q2.getW() + q2.getX() * q2.getX() + q2.getY() * q2.getY() + q2.getZ() * q2.getZ());
+        double angle = Math.acos(dotProduct / (q1Magnitude * q2Magnitude));
+        return angle;
     }
 
     public void sleep(long millis){
