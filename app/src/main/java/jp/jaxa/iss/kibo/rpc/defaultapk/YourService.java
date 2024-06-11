@@ -23,10 +23,8 @@ import gov.nasa.arc.astrobee.Result;
 import gov.nasa.arc.astrobee.types.Point;
 import gov.nasa.arc.astrobee.types.Quaternion;
 import jp.jaxa.iss.kibo.rpc.api.KiboRpcService;
-import jp.jaxa.iss.kibo.rpc.api.areas.AreaInfo;
-import jp.jaxa.iss.kibo.rpc.defaultapk.untils.AreasData;
+import jp.jaxa.iss.kibo.rpc.defaultapk.untils.AreasItemData;
 import jp.jaxa.iss.kibo.rpc.defaultapk.untils.PointWithQuaternion;
-import jp.jaxa.iss.kibo.rpc.defaultapk.untils.VisionData;
 
 /**
  * Class meant to handle commands from the Ground Data System and execute them in Astrobee
@@ -36,7 +34,8 @@ public class YourService extends KiboRpcService {
 
     private double[][]  navCamIntrinsicsMatrix;
     private double[][] dockCamIntrinsicsMatrix;
-    private AreasData areasData;
+    private AreasItemData areasData = new AreasItemData();
+    private int i = 0;
 
     TFliteDetector tfliteDetector;
 
@@ -47,10 +46,14 @@ public class YourService extends KiboRpcService {
         tfliteDetector = new TFliteDetector(this);
         Thread threadVision = new Thread(new Vision());
         threadVision.start();
-        moveToWithRetry(new Point(10.95, -9.5,5.195), new Quaternion(0f, 0f, 0.707f, 0.707f),5);
+        moveToWithRetry(new Point(10.95, -10,5.195), new Quaternion(0f, 0f, 0.707f, 0.707f),5);
         threadVision.interrupt();
-        AreaInfo areaInfo = areasData.getFinalAreaData()[1];
-        api.setAreaInfo(1, areaInfo.getItemName(), areaInfo.getNumber());
+        try {
+            Pair<String, Integer>  areaInfo = areasData.getFinalAreaData(1);
+            api.setAreaInfo(1, areaInfo.first, areaInfo.second);
+        }catch (Exception e) {
+            Log.i("Report", "FAILED" + e);
+        }
         api.reportRoundingCompletion();
     }
 
@@ -75,29 +78,71 @@ public class YourService extends KiboRpcService {
                 Mat dockImgNow = api.getMatDockCam();
 
                 Kinematics robotNowKinematics = api.getRobotKinematics();
-
                 if(!areImgEqual(navImgPast, navImgNow)){
                     PointWithQuaternion navImgShotPQ = new PointWithQuaternion(robotNowKinematics.getPosition(), robotNowKinematics.getOrientation());
                     navImgPast = navImgNow;
 
                     Mat calibNavImg = calibImgWithMatrix(navImgNow, navCamIntrinsicsMatrix);
-                    detectArucoFromMat(calibNavImg, navCamIntrinsicsMatrix[0], navImgShotPQ);
+                    scanItemFromMat(calibNavImg, navCamIntrinsicsMatrix[0]);
                 }//Task when new NavImg
 
                 if(!areImgEqual(dockImgPast, dockImgNow)){
                     PointWithQuaternion dockImgShotPQ = new PointWithQuaternion(robotNowKinematics.getPosition(), robotNowKinematics.getOrientation());//wait to fix
                     dockImgPast = dockImgNow;
 
-                    Mat calibDockImg = calibImgWithMatrix(navImgNow, navCamIntrinsicsMatrix);
-                    detectArucoFromMat(calibDockImg, navCamIntrinsicsMatrix[0], dockImgShotPQ);
+                    Mat calibDockImg = calibImgWithMatrix(dockImgNow, dockCamIntrinsicsMatrix);
+                    scanItemFromMat(calibDockImg, dockCamIntrinsicsMatrix[0]);
                 }//Task when new dockImg
-
+                sleep(1500);
+                if (Thread.currentThread().isInterrupted()) { break; }
             }
         }
-
     }
 
 
+    private void scanItemFromMat(Mat img, double[] camDoubleMatrix){
+        Mat cameraMatrix = new Mat(3, 3 , CvType.CV_64F);//setup cameraMatrix for calibratedImg
+        cameraMatrix.put(0,0, camDoubleMatrix[0]);
+        cameraMatrix.put(0,1, 0);
+        cameraMatrix.put(0,2, camDoubleMatrix[2]);
+        cameraMatrix.put(1,0, 0);
+        cameraMatrix.put(1,1, camDoubleMatrix[4]);
+        cameraMatrix.put(1,2, camDoubleMatrix[5]);
+        cameraMatrix.put(2,0, 0);
+        cameraMatrix.put(2,1, 0);
+        cameraMatrix.put(2,2, 1);
+
+
+        Mat distCoeffs = new Mat(1 , 5 , CvType.CV_64F);//setup distCoeffs for calibratedImg
+        distCoeffs.setTo(new Scalar(0.0));
+        MatOfDouble doubleDistCoeffs = new MatOfDouble(0.0, 0.0, 0.0, 0.0, 0.0);
+
+        List<Mat> arucoCorners = new ArrayList<>();
+        Mat arucoIDs = new Mat();
+
+        Aruco.detectMarkers(img, Aruco.getPredefinedDictionary(Aruco.DICT_5X5_250), arucoCorners, arucoIDs);
+
+        if(!arucoIDs.empty()) {
+            Mat rvecs = new Mat();
+            Mat tvecs = new Mat();
+            Aruco.estimatePoseSingleMarkers(arucoCorners, 0.05f, cameraMatrix, distCoeffs, rvecs, tvecs);
+
+            for (int i = 0; i < arucoIDs.rows(); i++) {
+                int id = (int) arucoIDs.get(i, 0)[0]-100;
+                if (id < 1 || id > 5) { continue; }
+                Mat rvec = rvecs.row(i);
+                Mat tvec = tvecs.row(i);
+
+                Mat lostItemBoardImg = getWarpItemImg(img, rvec, tvec, cameraMatrix, doubleDistCoeffs);
+
+                Pair<String, Integer> itemData = tfliteDetector.DetectFromMat(lostItemBoardImg);
+                if(itemData != null){
+                    areasData.putVisionData(id, itemData);
+                    Log.i("TFLite",id+"  :" + itemData.toString());
+                }
+            }
+        }
+    }
 
     //Vision Tasks
     private void detectArucoFromMat(Mat img, double[] camDoubleMatrix, PointWithQuaternion imgShotCameraPQ){
@@ -143,10 +188,6 @@ public class YourService extends KiboRpcService {
                 double[] arucoWorldPos = rotatePoint(tx, ty, tz, imgShotCameraPQ.quaternion);
 
                 Point arucoPoint = new Point(arucoWorldPos[0], arucoWorldPos[1], arucoWorldPos[2]);
-
-                Pair<String, Integer> itemData = tfliteDetector.DetectFromMat(lostItemBoardImg);
-
-                areasData.putVisionData(id, new VisionData(new Point(tx, ty, tz), itemData));
             }
         }
     }
@@ -154,10 +195,10 @@ public class YourService extends KiboRpcService {
     public Mat getWarpItemImg(Mat originImg, Mat rvec, Mat tvec, Mat cameraMatrix, MatOfDouble doubleDistCoeffs){
 
         MatOfPoint3f itemBoardWorldPoint = new MatOfPoint3f(
-                new Point3(-0.2425, -0.035, 0),
-                new Point3(-0.2425, -0.1125, 0),
-                new Point3(0.0375, -0.1125, 0),
-                new Point3(0.0375, -0.035, 0));
+                new Point3(-0.2325, 0.0375, 0),
+                new Point3(-0.2325, -0.1125, 0),
+                new Point3(-0.0325, -0.1125, 0),
+                new Point3(-0.0325, 0.0375, 0));
 
         MatOfPoint2f itemBoardImagePoints = new MatOfPoint2f();
 
@@ -177,7 +218,7 @@ public class YourService extends KiboRpcService {
 //        api.saveMatImage(test,"test.mat");
 
         int cmpp = 30;
-        Mat frontView = new Mat(15 * cmpp, 27 * cmpp, CvType.CV_8UC3);
+        Mat frontView = new Mat(15 * cmpp, 20 * cmpp, CvType.CV_8UC3);
 
         MatOfPoint2f dstPoints = new MatOfPoint2f(
                 new org.opencv.core.Point(0, 0),
@@ -188,7 +229,8 @@ public class YourService extends KiboRpcService {
 
         Mat transformationMatrix = Imgproc.getPerspectiveTransform(itemBoardImagePoints, dstPoints);
         Imgproc.warpPerspective(originImg, frontView, transformationMatrix, frontView.size());
-
+        api.saveMatImage(frontView, i+".mat");
+        i++;
         return frontView;
     }
 
@@ -288,6 +330,14 @@ public class YourService extends KiboRpcService {
 
     private static Quaternion conjugate(Quaternion q) {
         return new Quaternion(-q.getX(), -q.getY(), -q.getZ(), q.getW());
+    }
+
+    public void sleep(long millis){
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 }
 

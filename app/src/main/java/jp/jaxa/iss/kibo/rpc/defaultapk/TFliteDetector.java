@@ -22,19 +22,18 @@ public class TFliteDetector {
 
         ObjectDetector.ObjectDetectorOptions options = ObjectDetector.ObjectDetectorOptions
                 .builder()
-                .setScoreThreshold(0.3f)
+                .setScoreThreshold(0.8f)
                 .setMaxResults(10)
                 .build();
 
         try{
             objectDetector = ObjectDetector
-                    .createFromFileAndOptions(context, "a.tflite", options);
+                    .createFromFileAndOptions(context, "detect.tflite", options);
         } catch (IOException e) {
             Log.i("TFLite", "Failed to load model: " + e.getMessage());
         } catch (Exception e) {
             Log.i("TFLite", "An unexpected error occurred: " + e.getMessage());
         }
-
     }
 
     public Pair<String, Integer> DetectFromMat(Mat mat){
