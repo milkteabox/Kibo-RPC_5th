@@ -15,18 +15,16 @@ public class AreasItemData {
     }
 
     public void putVisionData(Integer areaNum, Pair<String, Integer> visionData) {
-        List<Pair<String, Integer>> visionDataList = areaVisionDataMap.get(areaNum);
-        if (visionDataList != null) {
-            visionDataList.add(visionData);
-        } else {
-            List<Pair<String, Integer>> newVisionDataList = new ArrayList<>();
-            newVisionDataList.add(visionData);
-            areaVisionDataMap.put(areaNum, newVisionDataList);
+        List<Pair<String, Integer>> list = areaVisionDataMap.get(areaNum);
+        if (list == null) {
+            list = new ArrayList<>();
         }
+        list.add(visionData);
+        areaVisionDataMap.put(areaNum, list);
     }
 
+
     public Pair<String, Integer> getFinalAreaData(Integer areaNum) {
-        Log.i("PairTEST",areaVisionDataMap.toString());
         Pair<String, Integer> itemData = getMaxFreqItemData(areaNum);
 
         return itemData;
