@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 public class AreasItemData {
-    private Map<Integer, List<Pair<String, Integer>>> areaVisionDataMap = areaVisionDataMap = new HashMap<>();;
+    private Map<Integer, List<Pair<String, Integer>>> areaVisionDataMap = new HashMap<>();;
 
     public AreasItemData() {
     }
