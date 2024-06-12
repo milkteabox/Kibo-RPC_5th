@@ -35,7 +35,6 @@ public class YourService extends KiboRpcService {
     private double[][]  navCamIntrinsicsMatrix;
     private double[][] dockCamIntrinsicsMatrix;
     private AreasItemData areasData = new AreasItemData();
-    private int i = 0;
 
     TFliteDetector tfliteDetector;
 
@@ -47,6 +46,7 @@ public class YourService extends KiboRpcService {
         Thread threadVision = new Thread(new Vision());
         threadVision.start();
         moveToWithRetry(new Point(10.95, -10,5.195), new Quaternion(0f, 0f, 0.707f, 0.707f),5);
+        sleep(5000);
         threadVision.interrupt();
         try {
             Pair<String, Integer>  areaInfo = areasData.getFinalAreaData(1);
@@ -55,6 +55,8 @@ public class YourService extends KiboRpcService {
             Log.i("Report", "FAILED" + e);
         }
         api.reportRoundingCompletion();
+        api.notifyRecognitionItem();
+        api.takeTargetItemSnapshot();
     }
 
     @Override
@@ -93,8 +95,12 @@ public class YourService extends KiboRpcService {
                     Mat calibDockImg = calibImgWithMatrix(dockImgNow, dockCamIntrinsicsMatrix);
                     scanItemFromMat(calibDockImg, dockCamIntrinsicsMatrix[0]);
                 }//Task when new dockImg
-                sleep(1500);
-                if (Thread.currentThread().isInterrupted()) { break; }
+
+                try {
+                    Thread.sleep(1500);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
             }
         }
     }
@@ -135,10 +141,12 @@ public class YourService extends KiboRpcService {
 
                 Mat lostItemBoardImg = getWarpItemImg(img, rvec, tvec, cameraMatrix, doubleDistCoeffs);
 
-                Pair<String, Integer> itemData = tfliteDetector.DetectFromMat(lostItemBoardImg);
-                if(itemData != null){
-                    areasData.putVisionData(id, itemData);
-                    Log.i("TFLite",id+"  :" + itemData.toString());
+                if(lostItemBoardImg != null){
+                    Pair<String, Integer> itemData = tfliteDetector.DetectFromMat(lostItemBoardImg);
+                    if(itemData != null){
+                        areasData.putVisionData(id, itemData);
+                        Log.i("TFLite",id+"  :" + itemData.toString());
+                    }
                 }
             }
         }
@@ -217,6 +225,13 @@ public class YourService extends KiboRpcService {
 //
 //        api.saveMatImage(test,"test.mat");
 
+        org.opencv.core.Point[] points = itemBoardImagePoints.toArray();
+            for (org.opencv.core.Point point : points) {
+                if (point.x < 0 || point.x >= originImg.cols() || point.y < 0 || point.y >= originImg.rows()) {
+                return null;
+                }
+            }
+
         int cmpp = 30;
         Mat frontView = new Mat(15 * cmpp, 20 * cmpp, CvType.CV_8UC3);
 
@@ -229,8 +244,6 @@ public class YourService extends KiboRpcService {
 
         Mat transformationMatrix = Imgproc.getPerspectiveTransform(itemBoardImagePoints, dstPoints);
         Imgproc.warpPerspective(originImg, frontView, transformationMatrix, frontView.size());
-        api.saveMatImage(frontView, i+".mat");
-        i++;
         return frontView;
     }
 

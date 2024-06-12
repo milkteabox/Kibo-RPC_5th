@@ -22,7 +22,7 @@ public class TFliteDetector {
 
         ObjectDetector.ObjectDetectorOptions options = ObjectDetector.ObjectDetectorOptions
                 .builder()
-                .setScoreThreshold(0.8f)
+                .setScoreThreshold(0.5f)
                 .setMaxResults(10)
                 .build();
 
@@ -66,6 +66,7 @@ public class TFliteDetector {
             }
         }
 
+        highestScoreLabel = highestScoreLabel.replace("\r", "");
         return new Pair<>(highestScoreLabel,highestScoreLabelCount);
     }
 }
