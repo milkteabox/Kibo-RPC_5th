@@ -23,15 +23,10 @@ public class AreasItemData {
         areaVisionDataMap.put(areaNum, list);
     }
 
-
-    public Pair<String, Integer> getFinalAreaData(Integer areaNum) {
-        Pair<String, Integer> itemData = getMaxFreqItemData(areaNum);
-
-        return itemData;
-    }
-
-    private Pair<String, Integer> getMaxFreqItemData(Integer areaNum) {
+    public Pair<String, Integer> getMaxFreqItemData(Integer areaNum) {
         List<Pair<String, Integer>> visionDataList = areaVisionDataMap.get(areaNum);
+
+        if (visionDataList == null || visionDataList.isEmpty()) { return null; }
 
         Map<String, Integer> frequencyMap = new HashMap<>();
         for (Pair<String, Integer> pair : visionDataList) {

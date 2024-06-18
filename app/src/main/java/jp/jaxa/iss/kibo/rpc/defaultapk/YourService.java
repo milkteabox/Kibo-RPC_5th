@@ -26,6 +26,7 @@ import jp.jaxa.iss.kibo.rpc.api.KiboRpcService;
 import jp.jaxa.iss.kibo.rpc.defaultapk.untils.AreasItemData;
 import jp.jaxa.iss.kibo.rpc.defaultapk.untils.PointWithQuaternion;
 
+import static jp.jaxa.iss.kibo.rpc.defaultapk.Constants.*;
 /**
  * Class meant to handle commands from the Ground Data System and execute them in Astrobee
  */
@@ -37,6 +38,7 @@ public class YourService extends KiboRpcService {
     private AreasItemData areasData = new AreasItemData();
 
     TFliteDetector tfliteDetector;
+    PathMap pathMap = new PathMap();
 
     @Override
     protected void runPlan1(){
@@ -45,16 +47,9 @@ public class YourService extends KiboRpcService {
         tfliteDetector = new TFliteDetector(this);
         Thread threadVision = new Thread(new Vision());
         threadVision.start();
-        moveToWithRetry(new Point(10.95, -10,5.195), new Quaternion(0f, 0f, 0.707f, 0.707f),5);
-        sleep(5000);
+        followPath(pathMap.scanPath);
         threadVision.interrupt();
-        try {
-            Pair<String, Integer>  areaInfo = areasData.getFinalAreaData(1);
-            api.setAreaInfo(1, areaInfo.first, areaInfo.second);
-        }catch (Exception e) {
-            Log.i("Report", "FAILED" + e);
-        }
-        api.reportRoundingCompletion();
+        reportAreaInfoAndEndRounding();
         api.notifyRecognitionItem();
         api.takeTargetItemSnapshot();
     }
@@ -97,7 +92,7 @@ public class YourService extends KiboRpcService {
                 }//Task when new dockImg
 
                 try {
-                    Thread.sleep(1500);
+                    Thread.sleep(300);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }
@@ -135,7 +130,7 @@ public class YourService extends KiboRpcService {
 
             for (int i = 0; i < arucoIDs.rows(); i++) {
                 int id = (int) arucoIDs.get(i, 0)[0]-100;
-                if (id < 1 || id > 5) { continue; }
+                if (id < 0 || id > 4) { continue; }
                 Mat rvec = rvecs.row(i);
                 Mat tvec = tvecs.row(i);
 
@@ -345,12 +340,41 @@ public class YourService extends KiboRpcService {
         return new Quaternion(-q.getX(), -q.getY(), -q.getZ(), q.getW());
     }
 
+    private void reportAreaInfoAndEndRounding() {
+        for(int areaNum = 1; areaNum <= 4; areaNum++){
+            Pair<String, Integer> areaInfo = areasData.getMaxFreqItemData(areaNum);
+            if (areaInfo != null) {
+                api.setAreaInfo(areaNum, areaInfo.first, areaInfo.second);
+            } else { Log.i("Report", "areaInfo is null for areaNum: " + areaNum); }
+        }
+        api.reportRoundingCompletion();
+    }
+
     public void sleep(long millis){
         try {
             Thread.sleep(millis);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
+    }
+
+    private void followPath (List<PointWithQuaternion> path){
+
+        for (int i = 0; i < path.size() - 1; i++) {
+            PointWithQuaternion pq = path.get(i);
+            Point point = pq.point;
+            Quaternion quaternion = pq.quaternion;
+            Result result = api.moveTo(point, quaternion, false);
+            while (!result.hasSucceeded()) {
+                result = api.moveTo(point, quaternion, false);
+            }
+        }
+
+        int lastIndex = path.size() - 1;
+        Point lastPoint = path.get(lastIndex).point;
+        Quaternion lastQuaternion = path.get(lastIndex).quaternion;
+
+        moveToWithRetry(lastPoint, lastQuaternion, 5);
     }
 }
 
