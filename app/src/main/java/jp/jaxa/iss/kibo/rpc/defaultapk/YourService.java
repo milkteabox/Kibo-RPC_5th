@@ -38,7 +38,6 @@ public class YourService extends KiboRpcService {
     private AreasItemData areasData = new AreasItemData();
 
     TFliteDetector tfliteDetector;
-    PathMap pathMap = new PathMap();
 
     @Override
     protected void runPlan1(){
@@ -47,7 +46,7 @@ public class YourService extends KiboRpcService {
         tfliteDetector = new TFliteDetector(this);
         Thread threadVision = new Thread(new Vision());
         threadVision.start();
-        followPath(pathMap.scanPath);
+        scanMove();
         threadVision.interrupt();
         reportAreaInfoAndEndRounding();
         api.notifyRecognitionItem();
@@ -358,23 +357,23 @@ public class YourService extends KiboRpcService {
         }
     }
 
-    private void followPath (List<PointWithQuaternion> path){
+    private void scanMove(){
+        goPathPoint(scanPath_1);
+        sleep(1500);
+        goPathPoint(scanPath_2);
+        goPathPoint(scanPath_3);
+        goPathPoint(scanPath_4);
+        goPathPoint(scanPath_5);
+        moveToWithRetry(astronautPointwithQuaternion.point, astronautPointwithQuaternion.quaternion, 5);
+    }
 
-        for (int i = 0; i < path.size() - 1; i++) {
-            PointWithQuaternion pq = path.get(i);
-            Point point = pq.point;
-            Quaternion quaternion = pq.quaternion;
-            Result result = api.moveTo(point, quaternion, false);
-            while (!result.hasSucceeded()) {
-                result = api.moveTo(point, quaternion, false);
-            }
+    private void goPathPoint(PointWithQuaternion pq){
+        Point point = pq.point;
+        Quaternion quaternion = pq.quaternion;
+        Result result = api.moveTo(point, quaternion, false);
+        while (!result.hasSucceeded()) {
+            result = api.moveTo(point, quaternion, false);
         }
-
-        int lastIndex = path.size() - 1;
-        Point lastPoint = path.get(lastIndex).point;
-        Quaternion lastQuaternion = path.get(lastIndex).quaternion;
-
-        moveToWithRetry(lastPoint, lastQuaternion, 5);
     }
 }
 
