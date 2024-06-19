@@ -36,6 +36,7 @@ public class YourService extends KiboRpcService {
     private double[][]  navCamIntrinsicsMatrix;
     private double[][] dockCamIntrinsicsMatrix;
     private AreasItemData areasData = new AreasItemData();
+    private String[] finalAreaData = new String[5];
 
     TFliteDetector tfliteDetector;
 
@@ -47,10 +48,11 @@ public class YourService extends KiboRpcService {
         Thread threadVision = new Thread(new Vision());
         threadVision.start();
         scanMove();
-        threadVision.interrupt();
         reportAreaInfoAndEndRounding();
+        sleep(3500);
+        threadVision.interrupt();
         api.notifyRecognitionItem();
-        api.takeTargetItemSnapshot();
+        targetTask();
     }
 
     @Override
@@ -288,14 +290,15 @@ public class YourService extends KiboRpcService {
     }
 
     //Move Tasks
-    private boolean moveToWithRetry(Point point, Quaternion quaternion, int loopMAX_time) {
+    private boolean moveToWithRetry(PointWithQuaternion pq, int loopMAX_time) {
+        Point point = pq.point;
+        Quaternion quaternion = pq.quaternion;
         Result result;
-        final int LOOP_MAX = loopMAX_time;
         final double MAX_THRESHOLD_Angle = 8.75;
         result = api.moveTo(point, quaternion, false);
         Quaternion currentQuaternion = api.getRobotKinematics().getOrientation();
         int loopCounter = 0;
-        while (calculateAngle(currentQuaternion, quaternion) <= MAX_THRESHOLD_Angle && loopCounter < LOOP_MAX) {
+        while (calculateAngle(currentQuaternion, quaternion) <= MAX_THRESHOLD_Angle && loopCounter < loopMAX_time) {
             result = api.moveTo(point, quaternion, false);
             ++loopCounter;
         }
@@ -342,7 +345,8 @@ public class YourService extends KiboRpcService {
     private void reportAreaInfoAndEndRounding() {
         for(int areaNum = 1; areaNum <= 4; areaNum++){
             Pair<String, Integer> areaInfo = areasData.getMaxFreqItemData(areaNum);
-            if (areaInfo != null) {
+            finalAreaData[areaNum] = areaInfo.first;
+            if (areaInfo.first != null || areaInfo.second != null) {
                 api.setAreaInfo(areaNum, areaInfo.first, areaInfo.second);
             } else { Log.i("Report", "areaInfo is null for areaNum: " + areaNum); }
         }
@@ -359,12 +363,49 @@ public class YourService extends KiboRpcService {
 
     private void scanMove(){
         goPathPoint(scanPath_1);
-        sleep(1500);
+        goPathPoint(scanPath_1_2);
         goPathPoint(scanPath_2);
         goPathPoint(scanPath_3);
         goPathPoint(scanPath_4);
         goPathPoint(scanPath_5);
-        moveToWithRetry(astronautPointwithQuaternion.point, astronautPointwithQuaternion.quaternion, 5);
+        moveToWithRetry(astronautPointwithQuaternion, 5);
+    }
+
+    private void targetTask(){
+        String targetItem = areasData.getMaxFreqItemData(0).first;
+        Integer targetArea = 4;
+        for(int areaNum = 1; areaNum <= 4; areaNum++){
+            if(finalAreaData[areaNum].equals(targetItem)){
+                targetArea = areaNum;
+            }
+        }
+        if(areasData.getMaxFreqItemData(0)==null){
+            Log.i("TARGET", "NULL");
+            moveToWithRetry(targetPQ_area4, 5);
+        }else{
+            Log.i("TARGET", targetItem + targetArea);
+            switch (targetArea){
+                case 1:
+                    goPathPoint(scanPath_4);
+                    goPathPoint(scanPath_3);
+                    goPathPoint(scanPath_2);
+                    goPathPoint(scanPath_1);
+                    moveToWithRetry(targetPQ_area1, 5);
+                    break;
+                case 2:
+                    goPathPoint(targetPQ_path23Point);
+                    moveToWithRetry(targetPQ_area2, 5);
+                    break;
+                case 3:
+                    goPathPoint(targetPQ_path23Point);
+                    moveToWithRetry(targetPQ_area3, 5);
+                    break;
+                default:
+                    moveToWithRetry(targetPQ_area4, 5);
+                    break;
+            }
+        }
+        api.takeTargetItemSnapshot();
     }
 
     private void goPathPoint(PointWithQuaternion pq){
