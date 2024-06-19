@@ -101,6 +101,49 @@ public class YourService extends KiboRpcService {
         }
     }
 
+    private Point calcArucoPos(Mat img, Integer targetAreaNum){
+        double[] camDoubleMatrix = navCamIntrinsicsMatrix[0];
+
+        Mat cameraMatrix = new Mat(3, 3 , CvType.CV_64F);//setup cameraMatrix for calibratedImg
+        cameraMatrix.put(0,0, camDoubleMatrix[0]);
+        cameraMatrix.put(0,1, 0);
+        cameraMatrix.put(0,2, camDoubleMatrix[2]);
+        cameraMatrix.put(1,0, 0);
+        cameraMatrix.put(1,1, camDoubleMatrix[4]);
+        cameraMatrix.put(1,2, camDoubleMatrix[5]);
+        cameraMatrix.put(2,0, 0);
+        cameraMatrix.put(2,1, 0);
+        cameraMatrix.put(2,2, 1);
+
+
+        Mat distCoeffs = new Mat(1 , 5 , CvType.CV_64F);//setup distCoeffs for calibratedImg
+        distCoeffs.setTo(new Scalar(0.0));
+
+        List<Mat> arucoCorners = new ArrayList<>();
+        Mat arucoIDs = new Mat();
+
+        Aruco.detectMarkers(img, Aruco.getPredefinedDictionary(Aruco.DICT_5X5_250), arucoCorners, arucoIDs);
+
+        if(!arucoIDs.empty()) {
+            Mat rvecs = new Mat();
+            Mat tvecs = new Mat();
+            Aruco.estimatePoseSingleMarkers(arucoCorners, 0.05f, cameraMatrix, distCoeffs, rvecs, tvecs);
+
+            for (int i = 0; i < arucoIDs.rows(); i++) {
+                int id = (int) arucoIDs.get(i, 0)[0]-100;
+                if(id != targetAreaNum){continue;}
+                Mat tvec = tvecs.row(i);
+
+                double[] tvecArray = tvec.get(0, 0);
+                double tx = tvecArray[0];
+                double ty = tvecArray[1];
+                double tz = tvecArray[2];
+
+                return new Point(tx, ty, tz);
+            }
+        }
+        return null;
+    }
 
     private void scanItemFromMat(Mat img, double[] camDoubleMatrix){
         Mat cameraMatrix = new Mat(3, 3 , CvType.CV_64F);//setup cameraMatrix for calibratedImg
@@ -144,54 +187,6 @@ public class YourService extends KiboRpcService {
                         Log.i("TFLite",id+"  :" + itemData.toString());
                     }
                 }
-            }
-        }
-    }
-
-    //Vision Tasks
-    private void detectArucoFromMat(Mat img, double[] camDoubleMatrix, PointWithQuaternion imgShotCameraPQ){
-
-        Mat cameraMatrix = new Mat(3, 3 , CvType.CV_64F);//setup cameraMatrix for calibratedImg
-        cameraMatrix.put(0,0, camDoubleMatrix[0]);
-        cameraMatrix.put(0,1, 0);
-        cameraMatrix.put(0,2, camDoubleMatrix[2]);
-        cameraMatrix.put(1,0, 0);
-        cameraMatrix.put(1,1, camDoubleMatrix[4]);
-        cameraMatrix.put(1,2, camDoubleMatrix[5]);
-        cameraMatrix.put(2,0, 0);
-        cameraMatrix.put(2,1, 0);
-        cameraMatrix.put(2,2, 1);
-
-
-        Mat distCoeffs = new Mat(1 , 5 , CvType.CV_64F);//setup distCoeffs for calibratedImg
-        distCoeffs.setTo(new Scalar(0.0));
-        MatOfDouble doubleDistCoeffs = new MatOfDouble(0.0, 0.0, 0.0, 0.0, 0.0);
-
-        List<Mat> arucoCorners = new ArrayList<>();
-        Mat arucoIDs = new Mat();
-
-        Aruco.detectMarkers(img, Aruco.getPredefinedDictionary(Aruco.DICT_5X5_250), arucoCorners, arucoIDs);
-
-        if(!arucoIDs.empty()) {
-            Mat rvecs = new Mat();
-            Mat tvecs = new Mat();
-            Aruco.estimatePoseSingleMarkers(arucoCorners, 0.05f, cameraMatrix, distCoeffs, rvecs, tvecs);
-
-            for (int i = 0; i < arucoIDs.rows(); i++) {
-                int id = (int) arucoIDs.get(i, 0)[0]-100;
-                if (id < 1 || id > 5) { continue; }
-                Mat rvec = rvecs.row(i);
-                Mat tvec = tvecs.row(i);
-
-                Mat lostItemBoardImg = getWarpItemImg(img, rvec, tvec, cameraMatrix, doubleDistCoeffs);
-
-                double[] tvecArray = tvec.get(0, 0);
-                double tx = tvecArray[0];
-                double ty = tvecArray[1];
-                double tz = tvecArray[2];
-                double[] arucoWorldPos = rotatePoint(tx, ty, tz, imgShotCameraPQ.quaternion);
-
-                Point arucoPoint = new Point(arucoWorldPos[0], arucoWorldPos[1], arucoWorldPos[2]);
             }
         }
     }
@@ -373,36 +368,47 @@ public class YourService extends KiboRpcService {
 
     private void targetTask(){
         String targetItem = areasData.getMaxFreqItemData(0).first;
-        Integer targetArea = 4;
+        Integer targetAreaNum = 4;
         for(int areaNum = 1; areaNum <= 4; areaNum++){
             if(finalAreaData[areaNum].equals(targetItem)){
-                targetArea = areaNum;
+                targetAreaNum = areaNum;
             }
         }
         if(areasData.getMaxFreqItemData(0)==null){
             Log.i("TARGET", "NULL");
             moveToWithRetry(targetPQ_area4, 5);
         }else{
-            Log.i("TARGET", targetItem + targetArea);
-            switch (targetArea){
+            Log.i("TARGET", targetItem + targetAreaNum);
+            switch (targetAreaNum){
                 case 1:
-                    goPathPoint(scanPath_4);
-                    goPathPoint(scanPath_3);
-                    goPathPoint(scanPath_2);
-                    goPathPoint(scanPath_1);
+                    goPathPoint(targetPQ_pathPoint1_1);
+                    goPathPoint(targetPQ_pathPoint1_2);
+                    goPathPoint(targetPQ_pathPoint1_3);
                     moveToWithRetry(targetPQ_area1, 5);
                     break;
                 case 2:
-                    goPathPoint(targetPQ_path23Point);
+                    goPathPoint(targetPQ_pathPoint2);
                     moveToWithRetry(targetPQ_area2, 5);
                     break;
                 case 3:
-                    goPathPoint(targetPQ_path23Point);
+                    goPathPoint(scanPath_4);
                     moveToWithRetry(targetPQ_area3, 5);
                     break;
                 default:
                     moveToWithRetry(targetPQ_area4, 5);
                     break;
+            }
+        }
+        Point robotPos = api.getRobotKinematics().getPosition();
+        sleep(5000);
+        Point error = calcArucoPos(calibImgWithMatrix(api.getMatNavCam(), navCamIntrinsicsMatrix), targetAreaNum);
+        if(error != null){
+            if(targetAreaNum == 2||targetAreaNum == 3){
+                moveToWithRetry(new PointWithQuaternion(new Point(robotPos.getX() + error.getX(), robotPos.getY() - error.getY(), targetZ_area23), new Quaternion(0.5f, 0.5f, -0.5f, 0.5f)),5);
+            }else if(targetAreaNum == 1){
+                moveToWithRetry(new PointWithQuaternion(new Point(robotPos.getX() + error.getX() + error.getX(), targetY_area1, robotPos.getZ() - error.getY()), new Quaternion(0f, 0f, -0.707f, 0.707f)),5);
+            }else {
+                moveToWithRetry(new PointWithQuaternion(new Point(targetX_area4, robotPos.getY() - error.getX(), robotPos.getZ() + error.getY()), new Quaternion(0f,0f,-1f,0f)),5);
             }
         }
         api.takeTargetItemSnapshot();
