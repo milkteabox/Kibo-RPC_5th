@@ -400,13 +400,13 @@ public class YourService extends KiboRpcService {
             }
         }
         Point robotPos = api.getRobotKinematics().getPosition();
-        sleep(5000);
+        sleep(3500);
         Point error = calcArucoPos(calibImgWithMatrix(api.getMatNavCam(), navCamIntrinsicsMatrix), targetAreaNum);
         if(error != null){
             if(targetAreaNum == 2||targetAreaNum == 3){
                 moveToWithRetry(new PointWithQuaternion(new Point(robotPos.getX() + error.getX(), robotPos.getY() - error.getY(), targetZ_area23), new Quaternion(0.5f, 0.5f, -0.5f, 0.5f)),5);
             }else if(targetAreaNum == 1){
-                moveToWithRetry(new PointWithQuaternion(new Point(robotPos.getX() + error.getX() + error.getX(), targetY_area1, robotPos.getZ() - error.getY()), new Quaternion(0f, 0f, -0.707f, 0.707f)),5);
+                moveToWithRetry(new PointWithQuaternion(new Point(robotPos.getX() + error.getX(), targetY_area1, robotPos.getZ() - error.getY()), new Quaternion(0f, 0f, -0.707f, 0.707f)),5);
             }else {
                 moveToWithRetry(new PointWithQuaternion(new Point(targetX_area4, robotPos.getY() - error.getX(), robotPos.getZ() + error.getY()), new Quaternion(0f,0f,-1f,0f)),5);
             }
