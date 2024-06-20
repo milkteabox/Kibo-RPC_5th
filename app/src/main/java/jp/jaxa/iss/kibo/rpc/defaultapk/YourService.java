@@ -292,7 +292,7 @@ public class YourService extends KiboRpcService {
         for(int areaNum = 1; areaNum <= 4; areaNum++){
             Pair<String, Integer> areaInfo = areasData.getMaxFreqItemData(areaNum);
             finalAreaData[areaNum] = areaInfo.first;
-            if (areaInfo.first != null || areaInfo.second != null) {
+            if (areaInfo.first != null && areaInfo.second != null) {
                 api.setAreaInfo(areaNum, areaInfo.first, areaInfo.second);
             } else { Log.i("Report", "areaInfo is null for areaNum: " + areaNum); }
         }

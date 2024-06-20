@@ -24,7 +24,7 @@ class TFliteDetector {
 
         ObjectDetector.ObjectDetectorOptions options = ObjectDetector.ObjectDetectorOptions
                 .builder()
-                .setScoreThreshold(0.5f)
+                .setScoreThreshold(0.45f)
                 .setMaxResults(10)
                 .build();
 
