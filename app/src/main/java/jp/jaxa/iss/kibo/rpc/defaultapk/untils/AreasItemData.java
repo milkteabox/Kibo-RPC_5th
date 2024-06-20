@@ -1,6 +1,5 @@
 package jp.jaxa.iss.kibo.rpc.defaultapk.untils;
 
-import android.util.Log;
 import android.util.Pair;
 
 import java.util.ArrayList;
@@ -10,9 +9,6 @@ import java.util.Map;
 
 public class AreasItemData {
     private Map<Integer, List<Pair<String, Integer>>> areaVisionDataMap = new HashMap<>();;
-
-    public AreasItemData() {
-    }
 
     public void putVisionData(Integer areaNum, Pair<String, Integer> visionData) {
         List<Pair<String, Integer>> list = areaVisionDataMap.get(areaNum);

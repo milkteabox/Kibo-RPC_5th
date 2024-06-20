@@ -27,9 +27,7 @@ import jp.jaxa.iss.kibo.rpc.defaultapk.untils.AreasItemData;
 import jp.jaxa.iss.kibo.rpc.defaultapk.untils.PointWithQuaternion;
 
 import static jp.jaxa.iss.kibo.rpc.defaultapk.Constants.*;
-/**
- * Class meant to handle commands from the Ground Data System and execute them in Astrobee
- */
+import static org.opencv.calib3d.Calib3d.Rodrigues;
 
 public class YourService extends KiboRpcService {
 
@@ -56,14 +54,10 @@ public class YourService extends KiboRpcService {
     }
 
     @Override
-    protected void runPlan2(){
-        // write your plan 2 here
-    }
+    protected void runPlan2(){}
 
     @Override
-    protected void runPlan3(){
-        // write your plan 3 here
-    }
+    protected void runPlan3(){}
 
     class Vision implements Runnable {
 
@@ -76,7 +70,7 @@ public class YourService extends KiboRpcService {
                 Mat dockImgNow = api.getMatDockCam();
 
                 Kinematics robotNowKinematics = api.getRobotKinematics();
-                if(!areImgEqual(navImgPast, navImgNow)){
+                if(areImgEqual(navImgPast, navImgNow)){
                     PointWithQuaternion navImgShotPQ = new PointWithQuaternion(robotNowKinematics.getPosition(), robotNowKinematics.getOrientation());
                     navImgPast = navImgNow;
 
@@ -84,7 +78,7 @@ public class YourService extends KiboRpcService {
                     scanItemFromMat(calibNavImg, navCamIntrinsicsMatrix[0]);
                 }//Task when new NavImg
 
-                if(!areImgEqual(dockImgPast, dockImgNow)){
+                if(areImgEqual(dockImgPast, dockImgNow)){
                     PointWithQuaternion dockImgShotPQ = new PointWithQuaternion(robotNowKinematics.getPosition(), robotNowKinematics.getOrientation());//wait to fix
                     dockImgPast = dockImgNow;
 
@@ -203,19 +197,6 @@ public class YourService extends KiboRpcService {
 
         Calib3d.projectPoints(itemBoardWorldPoint, rvec, tvec, cameraMatrix, doubleDistCoeffs, itemBoardImagePoints);
 
-//        org.opencv.core.Point topLeft = new org.opencv.core.Point(itemBoardImagePoints.get(0, 0));
-//        org.opencv.core.Point bottomLeft = new org.opencv.core.Point(itemBoardImagePoints.get(1, 0));
-//        org.opencv.core.Point bottomRight = new org.opencv.core.Point(itemBoardImagePoints.get(2, 0));
-//        org.opencv.core.Point topRight = new org.opencv.core.Point(itemBoardImagePoints.get(3, 0));
-//
-//        Mat test = originImg.clone();
-//        Imgproc.line(test, topRight, bottomRight, new Scalar(0, 255, 0), 2);
-//        Imgproc.line(test, bottomRight, bottomLeft, new Scalar(0, 255, 0), 2);
-//        Imgproc.line(test, bottomLeft, topLeft, new Scalar(0, 255, 0), 2);
-//        Imgproc.line(test, topLeft, topRight, new Scalar(0, 255, 0), 2);
-//
-//        api.saveMatImage(test,"test.mat");
-
         org.opencv.core.Point[] points = itemBoardImagePoints.toArray();
             for (org.opencv.core.Point point : points) {
                 if (point.x < 0 || point.x >= originImg.cols() || point.y < 0 || point.y >= originImg.rows()) {
@@ -242,9 +223,9 @@ public class YourService extends KiboRpcService {
         if (image1.rows() == image2.rows() && image1.cols() == image2.cols() && image1.channels() == image2.channels()) {
             Mat diffImage = new Mat();
             Core.compare(image1, image2, diffImage, Core.CMP_NE);
-            return Core.countNonZero(diffImage) == 0;
+            return Core.countNonZero(diffImage) != 0;
         } else {
-            return false;
+            return true;
         }
     }
 
@@ -304,37 +285,7 @@ public class YourService extends KiboRpcService {
         double dotProduct = q1.getW() * q2.getW() + q1.getX() * q2.getX() + q1.getY() * q2.getY() + q1.getZ() * q2.getZ();
         double q1Magnitude = Math.sqrt(q1.getW() * q1.getW() + q1.getX() * q1.getX() + q1.getY() * q1.getY() + q1.getZ() * q1.getZ());
         double q2Magnitude = Math.sqrt(q2.getW() * q2.getW() + q2.getX() * q2.getX() + q2.getY() * q2.getY() + q2.getZ() * q2.getZ());
-        double angle = Math.acos(dotProduct / (q1Magnitude * q2Magnitude));
-        return angle;
-    }
-
-    public static double[] rotatePoint(double x, double y, double z, Quaternion rotation) {
-        double[] result = new double[3];
-
-        // Convert the point to quaternion form
-        Quaternion p = new Quaternion((float) x, (float) y, (float) z, 0);
-
-        Quaternion q = rotation;
-        Quaternion q1 = multiplyQuaternions(q, p);
-        Quaternion rotatedPoint = multiplyQuaternions(q1,conjugate(q));
-
-        result[0] = rotatedPoint.getX();
-        result[1] = rotatedPoint.getY();
-        result[2] = rotatedPoint.getZ();
-
-        return result;
-    }
-
-    private static Quaternion multiplyQuaternions(Quaternion q1, Quaternion q2) {
-        float nw = q1.getW() * q2.getW() - q1.getX() * q2.getX() - q1.getY() * q2.getY() - q1.getZ() * q2.getZ();
-        float nx = q1.getW() * q2.getX() + q1.getX() * q2.getW() + q1.getY() * q2.getZ() - q1.getZ() * q2.getY();
-        float ny = q1.getW() * q2.getY() - q1.getX() * q2.getZ() + q1.getY() * q2.getW() + q1.getZ() * q2.getX();
-        float nz = q1.getW() * q2.getZ() + q1.getX() * q2.getY() - q1.getY() * q2.getX() + q1.getZ() * q2.getW();
-        return new Quaternion( nx, ny, nz, nw);
-    }
-
-    private static Quaternion conjugate(Quaternion q) {
-        return new Quaternion(-q.getX(), -q.getY(), -q.getZ(), q.getW());
+        return Math.acos(dotProduct / (q1Magnitude * q2Magnitude));
     }
 
     private void reportAreaInfoAndEndRounding() {

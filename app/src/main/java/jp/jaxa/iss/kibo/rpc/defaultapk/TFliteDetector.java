@@ -17,14 +17,14 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-public class TFliteDetector {
+class TFliteDetector {
     private ObjectDetector objectDetector;
 
-    public TFliteDetector(Context context){
+    TFliteDetector(Context context){
 
         ObjectDetector.ObjectDetectorOptions options = ObjectDetector.ObjectDetectorOptions
                 .builder()
-                .setScoreThreshold(0.5f)
+                .setScoreThreshold(0.415f)
                 .setMaxResults(10)
                 .build();
 
@@ -38,7 +38,7 @@ public class TFliteDetector {
         }
     }
 
-    public Pair<String, Integer> DetectFromMat(Mat mat){
+    Pair<String, Integer> DetectFromMat(Mat mat){
         Bitmap bitmap = Bitmap.createBitmap(mat.cols(), mat.rows(), Bitmap.Config.ARGB_8888);
         Utils.matToBitmap(mat, bitmap);
 
@@ -87,6 +87,7 @@ public class TFliteDetector {
             }
         }
 
+        assert highestScoreLabel != null;
         highestScoreLabel = highestScoreLabel.replace("\r", "");
         return new Pair<>(highestScoreLabel, highestScoreLabelCount);
     }
